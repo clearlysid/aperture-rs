@@ -73,13 +73,13 @@ pub async fn audio_devices() -> Result<Value, Box<dyn std::error::Error>> {
 lazy_static! {
     static ref VIDEO_CODECS: Vec<[&'static str; 2]> = {
         let mut codecs = vec![
-            ["h264", "H264"],
-            ["proRes422", "Apple ProRes 422"],
-            ["proRes4444", "Apple ProRes 4444"],
+            ["h264", "avc1"],
+            ["proRes422", "apcn"],
+            ["proRes4444", "ap4h"],
         ];
 
         if supports_hevc_hardware_encoding() {
-            codecs.push(["hevc", "HEVC"]);
+            codecs.push(["hevc", "hvc1"]);
         }
 
         codecs
