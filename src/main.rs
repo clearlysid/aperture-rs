@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
 use std::io;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 use tempfile::NamedTempFile;
@@ -94,7 +95,8 @@ pub fn video_codecs() -> &'static Vec<[&'static str; 2]> {
 struct Aperture {
     process_id: String,
     recorder: Option<std::process::Child>,
-    tmp_path: Option<NamedTempFile>,
+    tmp_path: Option<PathBuf>,
+    is_file_ready: bool,
 }
 
 impl Aperture {
@@ -103,6 +105,7 @@ impl Aperture {
             process_id: "".into(),
             recorder: None,
             tmp_path: None,
+            is_file_ready: false,
         }
     }
 
@@ -122,12 +125,12 @@ impl Aperture {
             return Err("Call `stop_recording()` first".into());
         }
 
-        self.tmp_path = Some(NamedTempFile::new()?);
+        self.tmp_path = Some(NamedTempFile::new()?.into_temp_path().with_extension("mp4"));
+
         let tmp_path = self
             .tmp_path
             .as_ref()
             .unwrap()
-            .path()
             .to_string_lossy()
             .to_string();
 
@@ -141,6 +144,8 @@ impl Aperture {
             "cropRect": crop_area,
             "videoCodec": video_codec.unwrap_or("h264".into())
         });
+
+        // TODO: Add a timeout of 5s here and return an error if the recording doesn't start
 
         // print recordor options
         println!("recorder_options: {}", recorder_options);
@@ -224,6 +229,21 @@ impl Aperture {
     //         .unwrap_or(false); // Default to false if the event value is not available
 
     //     Ok(value)
+    // }
+
+    // async fn stop_recording(&mut self) -> Result<String, Box<dyn Error>> {
+    //     self.throw_if_not_started()?;
+    //     if let Some(recorder) = &mut self.recorder {
+    //         recorder.kill()?;
+    //         recorder.wait()?;
+    //     }
+    //     if let Some(is_file_ready) = self.is_file_ready.take() {
+    //         let tmp_path = is_file_ready.await?;
+    //         self.tmp_path = tmp_path.clone();
+    //         Ok(tmp_path)
+    //     } else {
+    //         Ok("".to_string())
+    //     }
     // }
 }
 
