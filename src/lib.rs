@@ -10,8 +10,7 @@ use tokio::process::Command as TokioCommand;
 use tokio::time::{sleep, Duration};
 use url::Url;
 
-// Path to Aperture Binary
-const BIN: &str = "/Users/siddharth/code/aperture/src/bin/aperture";
+const APERTURE_BINARY: &str = "/Users/siddharth/code/aperture/src/bin/aperture";
 
 #[derive(Serialize)]
 pub struct CropArea {
@@ -52,7 +51,7 @@ fn supports_hevc_hardware_encoding() -> bool {
 }
 
 pub async fn screens() -> Result<Value, Box<dyn std::error::Error>> {
-    let output = TokioCommand::new(BIN)
+    let output = TokioCommand::new(APERTURE_BINARY)
         .args(&["list", "screens"])
         .output()
         .await?;
@@ -62,7 +61,7 @@ pub async fn screens() -> Result<Value, Box<dyn std::error::Error>> {
 }
 
 pub async fn audio_devices() -> Result<Value, Box<dyn std::error::Error>> {
-    let output = TokioCommand::new(BIN)
+    let output = TokioCommand::new(APERTURE_BINARY)
         .args(&["list", "audio-devices"])
         .output()
         .await?;
@@ -142,10 +141,10 @@ impl Aperture {
         println!("recorder_options: {}", recorder_options);
 
         // wait for 1s
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(2)).await;
 
         // Start recording
-        let output = Command::new(BIN)
+        let output = Command::new(APERTURE_BINARY)
             .args(&[
                 "record",
                 "--process-id",
@@ -182,8 +181,6 @@ impl Aperture {
             .tmp_path
             .take()
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Temporary path not found"))?;
-
-        println!("recording path: {}", tmp_path.to_string_lossy());
 
         Ok(tmp_path.to_string_lossy().to_string())
     }
