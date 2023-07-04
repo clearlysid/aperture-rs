@@ -92,7 +92,7 @@ pub fn video_codecs() -> &'static Vec<[&'static str; 2]> {
 
 pub struct Aperture {
     process_id: String,
-    recorder: Option<std::process::Child>,
+    recorder: Option<tokio::process::Child>,
     tmp_path: Option<PathBuf>,
 }
 
@@ -144,15 +144,15 @@ impl Aperture {
         sleep(Duration::from_secs(2)).await;
 
         // Start recording
-        let output = Command::new(APERTURE_BINARY)
+        let output = TokioCommand::new(APERTURE_BINARY)
             .args(&[
                 "record",
                 "--process-id",
                 &self.process_id,
                 &recorder_options.to_string(),
             ])
-            .spawn()
-            .unwrap();
+            .stdout(std::process::Stdio::piped())
+            .spawn()?;
 
         self.recorder = Some(output);
 
@@ -172,9 +172,9 @@ impl Aperture {
 
     pub async fn stop_recording(&mut self) -> Result<String, Box<dyn std::error::Error>> {
         self.throw_if_not_started()?;
-        if let Some(recorder) = &mut self.recorder {
-            recorder.kill()?;
-            recorder.wait()?;
+        if let Some(mut recorder) = self.recorder.take() {
+            recorder.kill().await?;
+            recorder.wait().await?;
         }
 
         let tmp_path = self
