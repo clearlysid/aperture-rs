@@ -109,11 +109,11 @@ impl Aperture {
         &mut self,
         screen_id: u32,
         fps: u32,
-        crop_area: CropArea,
         show_cursor: bool,
         highlight_clicks: bool,
-        audio_device_id: String,
         video_codec: Option<String>,
+        crop_area: CropArea,
+        audio_device_id: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.process_id = get_random_id();
 
@@ -126,17 +126,17 @@ impl Aperture {
         let tmp_path = self.tmp_path.as_ref().unwrap();
 
         let recorder_options = json!({
-            "destination": Url::from_file_path(&tmp_path).unwrap().to_string(),
+            "destination": file_url,
             "framesPerSecond": fps,
             "showCursor": show_cursor,
             "highlightClicks": highlight_clicks,
             "screenId": screen_id,
-            "audioDeviceId": audio_device_id,
-            "cropRect": [[crop_area.x, crop_area.y], [crop_area.width, crop_area.height]],
-            "videoCodec": video_codec.unwrap_or("h264".into())
+            "videoCodec": video_codec.unwrap_or("hvc1".into())
+            // "audioDeviceId": audio_device_id,
+            // "cropRect": [[crop_area.x, crop_area.y], [crop_area.width, crop_area.height]],
         });
 
-        // TODO: Add a timeout of 5s here and return an error if the recording doesn't start
+        println!("🟢 recorder_options: {}", recorder_options);
 
         println!("recorder_options: {}", recorder_options);
 
