@@ -81,7 +81,6 @@ lazy_static! {
         if supports_hevc_hardware_encoding() {
             codecs.push(["hevc", "hvc1"]);
         }
-
         codecs
     };
 }
@@ -93,7 +92,7 @@ pub fn video_codecs() -> &'static Vec<[&'static str; 2]> {
 pub struct Aperture {
     process_id: String,
     recorder: Option<tokio::process::Child>,
-    tmp_path: Option<PathBuf>,
+    temp_path: Option<PathBuf>,
 }
 
 impl Aperture {
@@ -101,7 +100,7 @@ impl Aperture {
         Aperture {
             process_id: "".into(),
             recorder: None,
-            tmp_path: None,
+            temp_path: None,
         }
     }
 
@@ -112,8 +111,8 @@ impl Aperture {
         show_cursor: bool,
         highlight_clicks: bool,
         video_codec: Option<String>,
-        crop_area: CropArea,
-        audio_device_id: String,
+        // crop_area: Option<CropArea>,
+        audio_device_id: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.process_id = get_random_id();
 
@@ -121,27 +120,34 @@ impl Aperture {
             return Err("Call `stop_recording()` first".into());
         }
 
-        self.tmp_path = Some(NamedTempFile::new()?.into_temp_path().with_extension("mp4"));
+        let file_name = format!("aperture-{}.mp4", self.process_id);
 
-        let tmp_path = self.tmp_path.as_ref().unwrap();
+        let path = NamedTempFile::new()?
+            .into_temp_path()
+            .with_file_name(&file_name);
+
+        self.temp_path = Some(path);
+
+        let file_url = Url::from_file_path(self.temp_path.as_ref().unwrap())
+            .unwrap()
+            .to_string();
+
+        println!("🟢 file_url: {}", file_url);
 
         let recorder_options = json!({
             "destination": file_url,
+            "screenId": screen_id,
             "framesPerSecond": fps,
             "showCursor": show_cursor,
             "highlightClicks": highlight_clicks,
-            "screenId": screen_id,
-            "videoCodec": video_codec.unwrap_or("hvc1".into())
-            // "audioDeviceId": audio_device_id,
+            "videoCodec": video_codec.unwrap_or("hvc1".into()),
+            "audioDeviceId": audio_device_id,
             // "cropRect": [[crop_area.x, crop_area.y], [crop_area.width, crop_area.height]],
         });
 
         println!("🟢 recorder_options: {}", recorder_options);
 
-        println!("recorder_options: {}", recorder_options);
-
-        // wait for 1s
-        sleep(Duration::from_secs(2)).await;
+        // TODO: Add a timeout of 5s here and return an error if the recording doesn't start
 
         // Start recording
         let output = TokioCommand::new(APERTURE_BINARY)
@@ -155,6 +161,12 @@ impl Aperture {
             .spawn()?;
 
         self.recorder = Some(output);
+
+        // wait a bit to let the recording start
+        sleep(Duration::from_secs(2)).await;
+
+        let on_start = self.wait_for_event("onStart").unwrap();
+        println!("on_start: {}", on_start);
 
         return Ok(());
     }
@@ -170,6 +182,29 @@ impl Aperture {
         }
     }
 
+    fn wait_for_event(&self, name: &str) -> Result<String, Box<dyn std::error::Error>> {
+        println!("⚠️ initiating wait_for_event: {}", name);
+
+        // NOTE: This function needs to run in order for recording to successfully start
+        // TOFIX: But it doesn't return anything and blocks the rest of the code from running
+
+        let command = Command::new(APERTURE_BINARY)
+            .args(&[
+                "events",
+                "listen",
+                "--exit",
+                "--process-id",
+                &self.process_id,
+                name,
+            ])
+            .status()?;
+
+        // This doesn't run
+        println!("command: {:?}", command);
+
+        Ok("".to_string())
+    }
+
     pub async fn stop_recording(&mut self) -> Result<String, Box<dyn std::error::Error>> {
         self.throw_if_not_started()?;
         if let Some(mut recorder) = self.recorder.take() {
@@ -177,12 +212,12 @@ impl Aperture {
             recorder.wait().await?;
         }
 
-        let tmp_path = self
-            .tmp_path
+        let temp_path = self
+            .temp_path
             .take()
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Temporary path not found"))?;
 
-        Ok(tmp_path.to_string_lossy().to_string())
+        Ok(temp_path.to_string_lossy().to_string())
     }
 
     // TODO: create pause and resume functionality
