@@ -2,11 +2,15 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::fs;
 use std::io;
 use std::process::Command;
+use std::time::Duration;
 use tempfile::NamedTempFile;
-// use tokio::task::spawn_blocking;
+use tokio::process::Command as TokioCommand;
+use tokio::time::sleep;
 
+// Path to Aperture Binary
 const BIN: &str = "/Users/siddharth/code/aperture/src/bin/aperture";
 
 #[derive(Serialize)]
@@ -24,11 +28,10 @@ fn get_random_id() -> String {
 }
 
 fn supports_hevc_hardware_encoding() -> bool {
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg("sysctl -n machdep.cpu.brand_string")
+    let output = Command::new("sysctl")
+        .args(&["-n", "machdep.cpu.brand_string"])
         .output()
-        .expect("Failed to execute command");
+        .expect("Failed to get CPU info");
 
     let cpu_model = String::from_utf8_lossy(&output.stdout);
 
@@ -49,21 +52,22 @@ fn supports_hevc_hardware_encoding() -> bool {
 }
 
 pub async fn screens() -> Result<Value, Box<dyn std::error::Error>> {
-    let output = Command::new(BIN).arg("list").arg("screens").output()?;
+    let output = TokioCommand::new(BIN)
+        .args(&["list", "screens"])
+        .output()
+        .await?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     let result = serde_json::from_str(&stderr)?;
     Ok(result)
 }
 
 pub async fn audio_devices() -> Result<Value, Box<dyn std::error::Error>> {
-    let output = Command::new(BIN)
-        .arg("list")
-        .arg("audio-devices")
-        .output()?;
-
+    let output = TokioCommand::new(BIN)
+        .args(&["list", "audio-devices"])
+        .output()
+        .await?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     let result = serde_json::from_str(&stderr)?;
-
     Ok(result)
 }
 
@@ -96,7 +100,7 @@ struct Aperture {
 impl Aperture {
     fn new() -> Self {
         Aperture {
-            process_id: get_random_id(),
+            process_id: "".into(),
             recorder: None,
             tmp_path: None,
         }
@@ -112,6 +116,8 @@ impl Aperture {
         audio_device_id: String,
         video_codec: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        self.process_id = get_random_id();
+
         if self.recorder.is_some() {
             return Err("Call `stop_recording()` first".into());
         }
@@ -142,23 +148,52 @@ impl Aperture {
         return Ok(());
     }
 
-    // fn send_event<T>(
-    //     &self,
-    //     name: &str,
-    //     parse: Option<&dyn Fn(&str) -> Option<T>>,
-    // ) -> Result<Option<T>, E> {
-    //     let output = Command::new("aperture")
-    //         .args(&["events", "send", "--process-id", &self.process_id, name])
-    //         .output()?;
+    pub async fn wait_for_event(
+        &self,
+        name: &str,
+        parse: Option<fn(&str) -> Option<String>>,
+    ) -> Option<String> {
+        let output = TokioCommand::new(BIN)
+            .args(&[
+                "events",
+                "listen",
+                "--process-id",
+                &self.process_id,
+                "--exit",
+                name,
+            ])
+            .output()
+            .await
+            .expect("Failed to execute command");
 
-    //     let stdout = std::str::from_utf8(&output.stdout)?.trim();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    //     if let Some(parse_fn) = parse {
-    //         Ok(parse_fn(stdout))
-    //     } else {
-    //         Ok(None)
-    //     }
-    // }
+        if let Some(parse_fn) = parse {
+            parse_fn(&stdout)
+        } else {
+            None
+        }
+    }
+
+    pub async fn send_event(
+        &self,
+        name: &str,
+        parse: Option<fn(&str) -> Option<String>>,
+    ) -> Option<String> {
+        let output = TokioCommand::new(BIN)
+            .args(&["events", "send", "--process-id", &self.process_id, name])
+            .output()
+            .await
+            .expect("Failed to execute command");
+
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        if let Some(parse_fn) = parse {
+            parse_fn(&stdout)
+        } else {
+            None
+        }
+    }
 
     fn throw_if_not_started(&self) -> Result<(), Box<dyn std::error::Error>> {
         if self.recorder.is_none() {
@@ -170,21 +205,43 @@ impl Aperture {
             Ok(())
         }
     }
+
+    async fn pause(self) {
+        self.throw_if_not_started();
+        self.send_event("pause", None).await;
+    }
+
+    async fn resume(self) {
+        self.throw_if_not_started();
+        self.send_event("resume", None).await;
+    }
+
+    // async fn isPaused(self) -> Result<bool, Box<dyn std::error::Error>> {
+    //     self.throw_if_not_started();
+    //     let value = self
+    //         .send_event("isPaused", Some(|value| value == "true"))
+    //         .await
+    //         .unwrap_or(false); // Default to false if the event value is not available
+
+    //     Ok(value)
+    // }
 }
 
 #[tokio::main]
 async fn main() {
-    println!("main started");
-
     let screens = screens().await.unwrap();
-    println!("screens: {:?}", screens);
+    println!("Screens: {:?}", screens);
 
     let audio_devices = audio_devices().await.unwrap();
-    println!("audio_devices: {:?}", audio_devices);
+    println!("Audio_devices: {:?}", audio_devices);
 
-    let mut aperture = Aperture::new();
+    let video_codecs = video_codecs();
+    println!("Video_codecs: {:?}", video_codecs);
 
-    aperture
+    println!("Preparing to record for 5 seconds");
+    let mut recorder = Aperture::new();
+
+    recorder
         .start_recording(
             1,  // screen_id ("BuiltInRetinaDisplay")
             30, // fps
@@ -202,6 +259,12 @@ async fn main() {
         )
         .await
         .unwrap(); // Handle the Result accordingly
+    println!("Recording started");
 
-    println!("main finished")
+    println!("File is ready");
+    sleep(Duration::from_secs(5)).await;
+
+    // let fp = recorder.stop_recording().await.unwrap();
+    // fs::rename(fp, "recording.mp4").unwrap();
+    println!("Video saved in the current directory");
 }
