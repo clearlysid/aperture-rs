@@ -2,10 +2,12 @@
 
 > Record the screen on macOS from Rust
 
-## Install
+## Install (Coming Soon)
+
+Add to your `Cargo.toml`
 
 ```toml
-npm install aperture
+aperture = "0.1"
 ```
 
 _Requires macOS 10.13 or later._
