@@ -15,33 +15,37 @@ _Requires macOS 10.13 or later._
 ## Usage
 
 ```rust
-// Initialize recorder
-let mut recorder = Aperture::new();
+use aperture::Aperture;
 
-// Start recording
-recorder
+fn main() {
+	// Initialize recorder
+	let mut recorder = Aperture::new();
+
+	// Start recording
+	recorder
 		.start_recording(
-				0,                          // screen_id
-				60,                         // fps
-				true,                       // show_cursor
-				false,                      // highlight_clicks
-				Some(("hvc1").to_string()), // video_codec
-				Some("BuiltInMicrophoneDevice".to_string()), // audio_device_id
+			0, // screen_id
+			60, // fps
+			true, // show_cursor
+			false, // highlight_clicks
+			Some(("hvc1").to_string()), // video_codec
+			Some("BuiltInMicrophoneDevice".to_string()), // audio_device_id
 		)
 		.await
 		.unwrap();
 
-// Wait 10 seconds
-sleep(Duration::from_secs(10)).await;
+	// Wait 10 seconds
+	sleep(Duration::from_secs(10)).await;
 
-// Stop recording
-let final_video = recorder.stop_recording().await.unwrap();
+	// Stop recording
+	let final_video = recorder.stop_recording().await.unwrap();
 
-// Print path to final video.
-println!("Video saved to: {}", final_video);
+	// Print path to final video.
+	println!("Video saved to: {}", final_video);
+}
 ```
 
-See [`src/example.rs`](src/example.rs) if you want to see a working demo.
+See [`src/example.rs`](src/example.rs) for a working demo.
 
 ## API
 

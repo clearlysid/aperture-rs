@@ -1,3 +1,5 @@
 /target
+/renders
+dummy.rs
 
 .DS_Store
