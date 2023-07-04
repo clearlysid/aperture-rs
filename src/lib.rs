@@ -10,6 +10,7 @@ use tokio::process::Command as TokioCommand;
 use tokio::time::{sleep, Duration};
 use url::Url;
 
+// TODO: make this a relative path
 const APERTURE_BINARY: &str = "/Users/siddharth/code/aperture/src/bin/aperture";
 
 #[derive(Serialize)]
