@@ -1,7 +1,10 @@
 [package]
 name = "aperture"
 version = "0.1.0"
+authors = ["Siddharth"]
 edition = "2021"
+description = "A screen recording utility for macOS"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
