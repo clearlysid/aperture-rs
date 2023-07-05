@@ -92,8 +92,9 @@ pub fn video_codecs() -> &'static Vec<[&'static str; 2]> {
 
 pub struct Aperture {
     process_id: String,
-    recorder: Option<tokio::process::Child>,
+    recorder: Option<std::process::Child>,
     temp_path: Option<PathBuf>,
+    is_file_ready: bool,
 }
 
 impl Aperture {
@@ -102,6 +103,7 @@ impl Aperture {
             process_id: "".into(),
             recorder: None,
             temp_path: None,
+            is_file_ready: false,
         }
     }
 
@@ -125,19 +127,15 @@ impl Aperture {
 
         let file_name = format!("aperture-{}.mp4", &process_id);
 
-        let path =
-            PathBuf::from("/Users/siddharth/code/aperture/test.mp4").with_file_name(&file_name);
-        // let path = NamedTempFile::new()?
-        //     .into_temp_path()
-        //     .with_file_name(&file_name);
+        let path = NamedTempFile::new()?
+            .into_temp_path()
+            .with_file_name(&file_name);
 
         self.temp_path = Some(path);
 
         let file_url = Url::from_file_path(&self.temp_path.as_ref().unwrap())
             .unwrap()
             .to_string();
-
-        println!("🟢 file_url: {}", file_url);
 
         let recorder_options = json!({
             "destination": file_url,
@@ -150,35 +148,33 @@ impl Aperture {
             // "cropRect": [[crop_area.x, crop_area.y], [crop_area.width, crop_area.height]],
         });
 
-        println!("🟢 recorder_options: {}", recorder_options);
+        let timeout = sleep(Duration::from_secs(5));
+        let start_event = self.wait_for_event("onStart");
 
-        // TODO: Add a timeout of 5s here and return an error if the recording doesn't start
-
-        let on_start = self.wait_for_event("onStart").unwrap();
-
-        // Start recording
-        let output = TokioCommand::new(APERTURE_BINARY)
+        let mut child = Command::new(APERTURE_BINARY)
             .args(&[
                 "record",
                 "--process-id",
                 &self.process_id,
                 &recorder_options.to_string(),
             ])
-            .stdout(std::process::Stdio::piped())
             .spawn()?;
 
-        self.recorder = Some(output);
-
-        // wait a bit to let the recording start
-        // sleep(Duration::from_secs(2)).await;
-
-        // println!("on_start: {}", on_start);
-
-        sleep(Duration::from_secs(2)).await;
-
-        println!("2 seconds after on start");
-
-        return Ok(());
+        tokio::select! {
+            _ = timeout => {
+                child.kill()?;
+                return Err("Could not start recording within 5 seconds".into());
+            }
+            _ = start_event => {
+                // Wait for additional 1s after the promise resolves for the recording to actually start
+                sleep(Duration::from_secs(1)).await;
+                self.recorder = Some(child);
+                let is_file_ready = self.wait_for_event("onFileReady").await.unwrap();
+                println!("🟢 is_file_ready: {}", is_file_ready);
+                self.is_file_ready = true;
+                Ok(())
+            }
+        }
     }
 
     fn throw_if_not_started(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -192,12 +188,7 @@ impl Aperture {
         }
     }
 
-    fn wait_for_event(&self, name: &str) -> Result<String, Box<dyn std::error::Error>> {
-        println!("⚠️ wait_for_event fired: {}", name);
-
-        // NOTE: This function needs to run in order for recording to successfully start
-        // TOFIX: But it doesn't return anything and blocks the rest of the code from running
-
+    async fn wait_for_event(&self, name: &str) -> Result<String, Box<dyn std::error::Error>> {
         let command = Command::new(APERTURE_BINARY)
             .args(&[
                 "events",
@@ -210,15 +201,21 @@ impl Aperture {
             .output()
             .expect(format!("Failed to wait for event: {}", name).as_str());
 
-        let stdout = String::from_utf8_lossy(&command.stdout);
-        Ok(stdout.trim().to_string())
+        let stdout = String::from_utf8_lossy(&command.stdout).trim().to_string();
+        Ok(stdout)
     }
 
     pub async fn stop_recording(&mut self) -> Result<String, Box<dyn std::error::Error>> {
         self.throw_if_not_started()?;
         if let Some(mut recorder) = self.recorder.take() {
-            recorder.kill().await?;
-            recorder.wait().await?;
+            // This command simulates a SIGTERM which the std library doesn't support
+            // Exiting this way ensures your video file doesn't get corrupted
+            Command::new("kill")
+                .args(&["-SIGTERM", &recorder.id().to_string()])
+                .output()?;
+
+            // recorder.kill()?; — will cause your video file to get corrupted
+            recorder.wait()?;
         }
 
         let temp_path = self
