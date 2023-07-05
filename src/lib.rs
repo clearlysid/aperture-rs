@@ -105,6 +105,7 @@ impl Aperture {
         }
     }
 
+    // TODO: expose recording options as separate struct
     pub async fn start_recording(
         &mut self,
         screen_id: u32,
@@ -115,21 +116,24 @@ impl Aperture {
         // crop_area: Option<CropArea>,
         audio_device_id: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.process_id = get_random_id();
+        let process_id = get_random_id();
+        self.process_id = process_id.clone();
 
         if self.recorder.is_some() {
             return Err("Call `stop_recording()` first".into());
         }
 
-        let file_name = format!("aperture-{}.mp4", self.process_id);
+        let file_name = format!("aperture-{}.mp4", &process_id);
 
-        let path = NamedTempFile::new()?
-            .into_temp_path()
-            .with_file_name(&file_name);
+        let path =
+            PathBuf::from("/Users/siddharth/code/aperture/test.mp4").with_file_name(&file_name);
+        // let path = NamedTempFile::new()?
+        //     .into_temp_path()
+        //     .with_file_name(&file_name);
 
         self.temp_path = Some(path);
 
-        let file_url = Url::from_file_path(self.temp_path.as_ref().unwrap())
+        let file_url = Url::from_file_path(&self.temp_path.as_ref().unwrap())
             .unwrap()
             .to_string();
 
@@ -150,6 +154,8 @@ impl Aperture {
 
         // TODO: Add a timeout of 5s here and return an error if the recording doesn't start
 
+        let on_start = self.wait_for_event("onStart").unwrap();
+
         // Start recording
         let output = TokioCommand::new(APERTURE_BINARY)
             .args(&[
@@ -164,10 +170,13 @@ impl Aperture {
         self.recorder = Some(output);
 
         // wait a bit to let the recording start
+        // sleep(Duration::from_secs(2)).await;
+
+        // println!("on_start: {}", on_start);
+
         sleep(Duration::from_secs(2)).await;
 
-        let on_start = self.wait_for_event("onStart").unwrap();
-        println!("on_start: {}", on_start);
+        println!("2 seconds after on start");
 
         return Ok(());
     }
@@ -184,7 +193,7 @@ impl Aperture {
     }
 
     fn wait_for_event(&self, name: &str) -> Result<String, Box<dyn std::error::Error>> {
-        println!("⚠️ initiating wait_for_event: {}", name);
+        println!("⚠️ wait_for_event fired: {}", name);
 
         // NOTE: This function needs to run in order for recording to successfully start
         // TOFIX: But it doesn't return anything and blocks the rest of the code from running
@@ -196,14 +205,13 @@ impl Aperture {
                 "--exit",
                 "--process-id",
                 &self.process_id,
-                name,
+                &name,
             ])
-            .status()?;
+            .output()
+            .expect(format!("Failed to wait for event: {}", name).as_str());
 
-        // This doesn't run
-        println!("command: {:?}", command);
-
-        Ok("".to_string())
+        let stdout = String::from_utf8_lossy(&command.stdout);
+        Ok(stdout.trim().to_string())
     }
 
     pub async fn stop_recording(&mut self) -> Result<String, Box<dyn std::error::Error>> {
