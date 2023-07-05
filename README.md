@@ -2,6 +2,14 @@
 
 > Record the screen on macOS from Rust
 
+## TODOs
+
+-   [ ] Make binary path relative
+-   [ ] Ensure optional props are passed into recording options correctly
+-   [ ] Bundle binary into crate
+-   [ ] Improve Readme and documentation
+-   [ ] Publish to Cargo
+
 ## Install (Coming Soon)
 
 Add to your `Cargo.toml`
