@@ -1,4 +1,4 @@
-use aperture::{audio_devices, screens, video_codecs, Aperture, CropArea};
+use aperture::{audio_devices, screens, video_codecs, Aperture, Options};
 use tokio::time::{sleep, Duration};
 
 #[tokio::main]
@@ -7,26 +7,27 @@ async fn main() {
     println!("Screens: {:?}", screens);
 
     let audio_devices = audio_devices().await.unwrap();
-    println!("Audio_devices: {:?}", audio_devices);
+    println!("Audio Devices: {:?}", audio_devices);
 
     let video_codecs = video_codecs();
-    println!("Video_codecs: {:?}", video_codecs);
+    println!("Video Codecs: {:?}", video_codecs);
+
+    println!("------------------------------------");
 
     println!("Preparing to record for ~10 seconds");
     let mut recorder = Aperture::new();
 
-    recorder
-        .start_recording(
-            0,                          // screen_id ("BuiltInRetinaDisplay")
-            30,                         // fps
-            true,                       // show_cursor
-            false,                      // highlight_clicks
-            Some(("hvc1").to_string()), // video_codec
-            Some("BuiltInMicrophoneDevice".to_string()), // audio_device_id
-                                        // None,                                  // crop_area
-        )
-        .await
-        .unwrap();
+    let recorder_options = Options {
+        screen_id: 1,
+        fps: 30,
+        show_cursor: true,
+        highlight_clicks: true,
+        video_codec: None,
+        audio_device_id: None,
+        crop_area: None,
+    };
+
+    recorder.start_recording(recorder_options).await.unwrap();
     println!("Recording started");
 
     sleep(Duration::from_secs(10)).await;
