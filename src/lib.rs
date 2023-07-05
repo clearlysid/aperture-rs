@@ -8,7 +8,6 @@ use std::process::Command;
 use tempfile::NamedTempFile;
 use tokio::process::Command as TokioCommand;
 use tokio::time::{sleep, Duration};
-use url::Url;
 
 // TODO: make this a relative path
 const APERTURE_BINARY: &str = "/Users/siddharth/code/aperture/src/bin/aperture";
@@ -19,6 +18,16 @@ pub struct CropArea {
     pub y: u32,
     pub width: u32,
     pub height: u32,
+}
+
+pub struct Options {
+    pub fps: u32,
+    pub screen_id: u32,
+    pub show_cursor: bool,
+    pub highlight_clicks: bool,
+    pub video_codec: Option<String>,
+    pub audio_device_id: Option<String>,
+    pub crop_area: Option<CropArea>,
 }
 
 fn get_random_id() -> String {
@@ -107,16 +116,9 @@ impl Aperture {
         }
     }
 
-    // TODO: expose recording options as separate struct
     pub async fn start_recording(
         &mut self,
-        screen_id: u32,
-        fps: u32,
-        show_cursor: bool,
-        highlight_clicks: bool,
-        video_codec: Option<String>,
-        // crop_area: Option<CropArea>,
-        audio_device_id: Option<String>,
+        options: Options,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let process_id = get_random_id();
         self.process_id = process_id.clone();
@@ -133,18 +135,18 @@ impl Aperture {
 
         self.temp_path = Some(path);
 
-        let file_url = Url::from_file_path(&self.temp_path.as_ref().unwrap())
+        let file_url = url::Url::from_file_path(&self.temp_path.as_ref().unwrap())
             .unwrap()
             .to_string();
 
         let recorder_options = json!({
             "destination": file_url,
-            "screenId": screen_id,
-            "framesPerSecond": fps,
-            "showCursor": show_cursor,
-            "highlightClicks": highlight_clicks,
-            "videoCodec": video_codec.unwrap_or("hvc1".into()),
-            "audioDeviceId": audio_device_id,
+            "screenId": options.screen_id,
+            "framesPerSecond": options.fps,
+            "showCursor": options.show_cursor,
+            "highlightClicks": options.highlight_clicks,
+            "videoCodec": options.video_codec.unwrap_or("hvc1".into()),
+            // "audioDeviceId": options.audio_device_id,
             // "cropRect": [[crop_area.x, crop_area.y], [crop_area.width, crop_area.height]],
         });
 
@@ -169,8 +171,7 @@ impl Aperture {
                 // Wait for additional 1s after the promise resolves for the recording to actually start
                 sleep(Duration::from_secs(1)).await;
                 self.recorder = Some(child);
-                let is_file_ready = self.wait_for_event("onFileReady").await.unwrap();
-                println!("🟢 is_file_ready: {}", is_file_ready);
+                self.wait_for_event("onFileReady").await.unwrap();
                 self.is_file_ready = true;
                 Ok(())
             }
